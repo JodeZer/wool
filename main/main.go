@@ -9,12 +9,18 @@ import (
 	"os"
 	"io/ioutil"
 	"strings"
+	"net/textproto"
+	"compress/gzip"
 )
 
 func Upload(url, file string) (err error) {
 	// Prepare a form that you will submit to that URL.
 	var b bytes.Buffer
 	w := multipart.NewWriter(&b)
+	err = w.SetBoundary("---------------------------8717257699615597491120257768")
+	if err != nil {
+		panic(err)
+	}
 	// Add your image file
 	f, err := os.Open(file)
 	if err != nil {
@@ -23,27 +29,48 @@ func Upload(url, file string) (err error) {
 	}
 	defer f.Close()
 
-	fw, err := w.CreateFormFile("imgfile", file)
+	if fw, err := w.CreateFormField("cross"); err != nil {
+		panic(err)
+	} else {
+		fw.Write([]byte("taobao"))
+	}
+
+	if fw, err := w.CreateFormField("type"); err != nil {
+		panic(err)
+	} else {
+		fw.Write([]byte("iframe"))
+	}
+
+	replacer := strings.NewReplacer("\\", "\\\\", `"`, "\\\"")
+
+	h := make(textproto.MIMEHeader)
+	h.Set("Content-Disposition",
+		fmt.Sprintf(`form-data; name="%s"; filename="%s"`,
+			replacer.Replace("imgfile"), replacer.Replace("nofile.jpg")))
+	h.Set("Content-Type", "image/jpeg")
+
+	fw, err := w.CreatePart(h)
 	if err != nil {
 		panic(err)
 		return
 	}
 
-	b.WriteString("Content-Type: image/jpeg\r\n")
+	//b.WriteString("Content-Type: image/jpeg\r\n")
 
 	if _, err = io.Copy(fw, f); err != nil {
 		panic(err)
 		return
 	}
+
 	// Add the other fields
-	if fw, err = w.CreateFormField("key"); err != nil {
-		panic(err)
-		return
-	}
-	if _, err = fw.Write([]byte("KEY")); err != nil {
-		panic(err)
-		return
-	}
+	//if fw, err = w.CreateFormField("key"); err != nil {
+	//	panic(err)
+	//	return
+	//}
+	//if _, err = fw.Write([]byte("KEY")); err != nil {
+	//	panic(err)
+	//	return
+	//}
 	// Don't forget to close the multipart writer.
 	// If you don't close it, your request will be missing the terminating boundary.
 	w.Close()
@@ -85,8 +112,14 @@ func Upload(url, file string) (err error) {
 		err = fmt.Errorf("bad status: %s", res.Status)
 	}
 
+	
+	reader, _ := gzip.NewReader(res.Body)
+
+	io.Copy(os.Stdout, reader)
+
 	respBytes, _ := ioutil.ReadAll(res.Body)
 	fmt.Println(string(respBytes))
+	fmt.Printf("%+v\n",res.Header)
 	fmt.Printf("%v\n",respBytes)
 	return
 }
