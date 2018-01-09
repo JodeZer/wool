@@ -18,6 +18,6 @@ func TestSearch(t *testing.T) {
 
 func TestSearchByTfsid(t *testing.T) {
 	sc := NewTBSearchClient(&TBSearchClientConf{})
-	searchRespString, err := sc.SearchReturnRawString("TB1BKfmdAfb_uJkSne1XXbE4XXa")
-	t.Logf("%s %s", searchRespString, err)
+	searchRespBuffer, err := sc.SearchReturnBuffer("TB1BKfmdAfb_uJkSne1XXbE4XXa")
+	t.Logf("%s %s", searchRespBuffer.String(), err)
 }

@@ -2,9 +2,7 @@ package wool
 
 import (
 	"bytes"
-	"compress/gzip"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -225,19 +223,10 @@ func (c *TFSImageClient) decodeResp(resp *http.Response) (string, error) {
 func (c *TFSImageClient) decodeRespContent(respbody io.ReadCloser, encoding string) (string, error) {
 	defer respbody.Close()
 
-	var b bytes.Buffer
-
-	if encoding == "gzip" {
-		reader, err := gzip.NewReader(respbody)
-		if err != nil {
-			return "", err
-		}
-
-		if _, err := io.Copy(&b, reader); err != nil {
-			return "", err
-		}
-		return b.String(), nil
+	buffer, err := decodeContentEncoding(respbody, encoding)
+	if err != nil {
+		return "", err
 	}
 
-	return "", errors.New(fmt.Sprintf("unknown content-encoding %s", encoding))
+	return buffer.String(), nil
 }
