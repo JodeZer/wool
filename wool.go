@@ -3,6 +3,7 @@ package wool
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -13,6 +14,8 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+
+	"github.com/tidwall/gjson"
 )
 
 type possibleTBImageRespJson struct {
@@ -228,5 +231,15 @@ func (c *TFSImageClient) decodeRespContent(respbody io.ReadCloser, encoding stri
 		return "", err
 	}
 
-	return buffer.String(), nil
+	resStr := buffer.String()
+	if strings.Contains(resStr, `<script>`) { // should parse from html
+		start, end := strings.Index(resStr, "{"), strings.LastIndex(resStr, "}")
+		resStr = resStr[start:end]
+	}
+
+	if gjson.Get(resStr, "status").String() != "1" {
+		return "", errors.New("upload fail")
+	}
+
+	return gjson.Get(resStr, "name").String(), nil
 }
