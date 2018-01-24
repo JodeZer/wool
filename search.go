@@ -2,9 +2,14 @@ package wool
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"reflect"
+	"strings"
+
+	"github.com/tidwall/gjson"
 )
 
 type SearchProducts struct {
@@ -56,28 +61,46 @@ func NewTBSearchClient(config *TBSearchClientConf) *TBSearchClient {
 }
 
 func (c *TBSearchClient) SearchReturnRawString(tfsid string) (string, error) {
-	reader, err := c.search(tfsid)
+	buffer, err := c.search(tfsid)
 	if err != nil {
 		return "", err
 	}
-	var bs []byte
-	if _, err := reader.Read(bs); err != nil {
-		return "", err
-	}
-	return string(bs), nil
+	return buffer.String(), nil
 }
 
 func (c *TBSearchClient) SearchReturnBuffer(tfsid string) (*bytes.Buffer, error) {
 	return c.search(tfsid)
 }
 
-func (c *TBSearchClient) SearchReturnProduct(tfsid string) ([]*SearchProducts, error) {
-	return nil, nil
+func (c *TBSearchClient) SearchReturnProduct(tfsid string, N int) ([]*SearchProducts, error) {
+	resStr, err := c.SearchReturnRawString(tfsid)
+	if err != nil {
+		return nil, err
+	}
+	res := make([]*SearchProducts, 0, N)
+	start, end := strings.Index(resStr, "g_page_config"), strings.Index(resStr, " g_srp_loadCss();")
+	resStr = resStr[start:end]
+	startJson, endJson := strings.Index(resStr, "{"), strings.LastIndex(resStr, "}")
+	resStr = resStr[startJson:endJson]
+	//fmt.Println(jsonStr)
+
+	array := gjson.Get(resStr, "mods").Get("itemlist").Get("data").Get("collections").Array()
+	productResults := array[0].Get("auctions").Array()
+	for i := 0; i < N && i < len(productResults); i++ {
+		prod := &SearchProducts{}
+		fmt.Println(productResults[i].String())
+		if err = json.Unmarshal([]byte(productResults[i].String()), prod); err != nil {
+			return nil, err
+		}
+		res = append(res, prod)
+
+	}
+	return res, nil
 }
 
 func (c *TBSearchClient) search(tfsid string) (*bytes.Buffer, error) {
 	req := c.newHttpRequest(tfsid)
-	fmt.Println(formatRequest(req))
+	//fmt.Println(formatRequest(req))
 	resp, err := c.cli.Do(req)
 	if err != nil {
 		return nil, err
@@ -89,15 +112,19 @@ func (c *TBSearchClient) search(tfsid string) (*bytes.Buffer, error) {
 }
 
 func (c *TBSearchClient) newHttpRequest(tfsid string) *http.Request {
-	req, _ := http.NewRequest(http.MethodGet, c.getUrl(), nil)
-	query := req.URL.Query()
+	q := url.Values{}
+
 	for k, v := range mustToMap(newMagicSearchParam(tfsid), "json") {
-		query.Set(k, v)
+		q.Set(k, v)
 	}
-	req.URL.RawQuery = query.Encode()
+
+	req, _ := http.NewRequest(http.MethodGet, c.getUrl(), nil)
 
 	c.setFixedHeader(req)
 
+	req.URL.RawQuery = q.Encode()
+
+	fmt.Println(req.URL.String())
 	return req
 
 }
@@ -117,7 +144,7 @@ func (c *TBSearchClient) setFixedHeader(req *http.Request) {
 }
 
 func (c *TBSearchClient) getUrl() string {
-	return "https://s.taobao.com?search"
+	return "https://s.taobao.com/search"
 }
 
 func mustToMap(in *SearchParam, tag string) map[string]string {
